@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community - CCCC</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <img src="logo.svg" alt="CCCC Logo" class="logo-img">
+                <h2>CCCC</h2>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="services.html">Services</a></li>
+                <li><a href="community.html">Community</a></li>
+                <li><a href="contact.html">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main>
+        <section class="community page-section">
+            <div class="container">
+                <h2>Join Our Community</h2>
+                <div class="community-content">
+                    <div class="community-info">
+                        <h3>Connect on Discord</h3>
+                        <p>Join our vibrant Discord community where young climate activists, educators, and supporters collaborate to create environmental change.</p>
+                        
+                        <div class="server-stats" id="serverStats">
+                            <div class="stat-item">
+                                <span class="stat-label">Server Status:</span>
+                                <span class="stat-value" id="serverStatus">Loading...</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Members Online:</span>
+                                <span class="stat-value" id="onlineMembers">Loading...</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Server Name:</span>
+                                <span class="stat-value" id="serverName">Loading...</span>
+                            </div>
+                        </div>
+                        
+                        <div class="discord-info">
+                            <p><strong>Server ID:</strong> 1395450486110556180</p>
+                            <a href="https://discord.gg/C2dryrBK" class="btn btn-discord" target="_blank">Join Discord Server</a>
+                        </div>
+                        
+                        <div class="quick-message">
+                            <div class="conversation-status">
+                                <h4>Your Identity</h4>
+                                <p>User ID: <span id="currentUserId">Loading...</span></p>
+                                <p>Contact ID: <span id="currentContactId">Loading...</span></p>
+                                <p><small>Your Contact ID stays the same so the AI remembers all your messages!</small></p>
+                                <button type="button" id="startNewConversationBtn" class="btn btn-secondary btn-small">Clear Conversation Display</button>
+                            </div>
+                            <h4>Send Message</h4>
+                            <p id="messageHelperText">Message will be posted in our Discord server to connect with climate activists:</p>
+                            <form id="quickMessageForm">
+                                <input type="text" id="quickName" placeholder="Your Name" required>
+                                <textarea id="quickMessage" placeholder="Your message..." rows="3" required></textarea>
+                                <button type="submit" class="btn btn-primary">Send to Discord</button>
+                            </form>
+                        </div>
+                        
+                        <div class="message-tracker">
+                            <h4>Check Message Status</h4>
+                            <p>Enter your Contact ID to check for responses:</p>
+                            <div class="status-checker">
+                                <input type="text" id="statusContactId" placeholder="Enter Contact ID (e.g., CCCC-ABC123)" />
+                                <button type="button" id="checkStatusBtn" class="btn btn-secondary">Check Status</button>
+                            </div>
+                            <div id="statusResult" class="status-result"></div>
+                            
+                            <div id="conversationThread" class="conversation-thread" style="display: none;">
+                                <h5>Conversation Thread</h5>
+                                <div id="conversationMessages" class="conversation-messages"></div>
+                                <div class="continue-conversation">
+                                    <textarea id="followUpMessage" placeholder="Continue the conversation..." rows="3"></textarea>
+                                    <button type="button" id="sendFollowUpBtn" class="btn btn-primary">Send Follow-up</button>
+                                </div>
+                            </div>
+                            
+                            <div class="your-messages">
+                                <h5>Your Recent Messages</h5>
+                                <div id="messageList" class="message-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="discord-widget">
+                        <iframe src="https://discord.com/widget?id=1395450486110556180&theme=dark" 
+                                width="350" 
+                                height="500" 
+                                allowtransparency="true" 
+                                frameborder="0" 
+                                sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts">
+                        </iframe>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>CCCC</h3>
+                    <p>Children's Climate Change Committee</p>
+                    <p class="footer-disclaimer">Giving children the power to change the world</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="about.html">About</a></li>
+                        <li><a href="services.html">Services</a></li>
+                        <li><a href="community.html">Community</a></li>
+                        <li><a href="contact.html">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Community</h4>
+                    <ul>
+                        <li><a href="https://discord.gg/C2dryrBK" target="_blank">Discord Server</a></li>
+                        <li><a href="https://discord.com/api/guilds/1395450486110556180/widget.json" target="_blank">API</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 CCCC. All rights reserved. | Climate action is our future.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
