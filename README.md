@@ -18,6 +18,8 @@ This project provides:
 - Message submission system with persistent user identity
 - Live conversation threading with auto-refresh every 10 seconds
 - Message status tracking and response notifications
+- **Enhanced Center-Screen Notification System** with pulsing effects and animations
+- **Offline Fallback Support** - notifications work even when backend is down
 
 ### 🤖 **Intelligent Discord Bot**
 - Automatic message forwarding from website to Discord
@@ -78,8 +80,8 @@ AUTO_RESPONSE_DELAY=3600000  # 1 hour in milliseconds
 
 ### 4. Start the System
 ```bash
-# Start both website and bot
-./start.sh
+# Start both website and bot (recommended)
+./start-system.sh
 
 # Or start manually:
 # Terminal 1: Start the bot
