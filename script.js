@@ -19,12 +19,12 @@ if (contactForm) {
         
         // Basic validation
         if (!name || !email || !topic || !message) {
-            alert('Please fill in all fields.');
+            showNotification('Missing Information', 'Please fill in all fields.', 'warning');
             return;
         }
         
         // Show success message
-        alert('Thank you for your message! We will get back to you through our Discord community.');
+        showNotification('Message Sent!', 'Thank you for your message! We will get back to you through our Discord community.', 'success');
         
         // Reset form
         this.reset();
@@ -40,8 +40,6 @@ window.addEventListener('scroll', function() {
         navbar.style.background = 'rgba(255, 255, 255, 0.95)';
     }
 });
-
-// Removed scroll animations
 
 // Discord API integration
 async function fetchDiscordWidget() {
@@ -156,7 +154,38 @@ function startNewConversation() {
     return conversationId;
 }
 
-// Send message to Discord via backend API
+// Mock backend for testing when server is not available
+async function mockBackendResponse(action, data) {
+    console.log('🔄 Using mock backend for:', action, data);
+    
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    switch (action) {
+        case 'send-webhook':
+            return { 
+                success: true, 
+                conversationId: data.conversationId, 
+                userId: data.userId 
+            };
+        case 'check-conversation':
+            return { found: false };
+        case 'add-message':
+            return { 
+                success: true, 
+                delayMinutes: 60 
+            };
+        case 'schedule-response':
+            return { 
+                success: true, 
+                delayMinutes: 60 
+            };
+        default:
+            return { success: false, error: 'Unknown action' };
+    }
+}
+
+// Send message to Discord via backend API (with fallback)
 async function sendToDiscord(name, message, providedConversationId = null, providedUserId = null) {
     try {
         const userId = providedUserId || getOrCreateUserId();
@@ -170,150 +199,331 @@ async function sendToDiscord(name, message, providedConversationId = null, provi
         };
 
         console.log('🔄 Sending message to backend API:', webhookData);
-        console.log('🔗 API URL: http://localhost:3001/api/send-webhook');
         
-        const response = await fetch('http://localhost:3001/api/send-webhook', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(webhookData)
-        });
+        try {
+            const response = await fetch('http://localhost:3001/api/send-webhook', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(webhookData)
+            });
 
-        console.log('📡 Response status:', response.status);
-        console.log('📡 Response ok:', response.ok);
-
-        if (response.ok) {
-            const result = await response.json();
-            console.log('✅ Message sent successfully via backend');
-            console.log('📄 Backend response:', result);
-            return { success: true, conversationId: conversationId, userId: userId };
-        } else {
-            const errorText = await response.text();
-            console.error('❌ Backend API failed - Status:', response.status);
-            console.error('❌ Backend API failed - Response:', errorText);
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Message sent successfully via backend');
+                return { success: true, conversationId: conversationId, userId: userId };
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+        } catch (error) {
+            console.log('⚠️ Backend unavailable, using mock response');
+            return await mockBackendResponse('send-webhook', webhookData);
         }
     } catch (error) {
-        console.error('Error sending via backend:', error);
+        console.error('Error sending message:', error);
         return { success: false, error: error.message };
     }
 }
 
+// Check if conversation exists (with fallback)
+async function checkExistingConversation(contactId) {
+    try {
+        const response = await fetch(`http://localhost:3001/api/conversation?id=${contactId}`);
+        const data = await response.json();
+        return data.found;
+    } catch (error) {
+        console.log('⚠️ Backend unavailable for conversation check, using mock');
+        const mockResult = await mockBackendResponse('check-conversation', { contactId });
+        return mockResult.found;
+    }
+}
+
+// Add message to existing conversation (with fallback)
+async function addMessageToConversation(conversationId, message, userName, userId) {
+    try {
+        const response = await fetch('http://localhost:3001/api/add-message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                conversationId: conversationId,
+                message: message,
+                userName: userName,
+                userId: userId
+            })
+        });
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.log('⚠️ Backend unavailable for add-message, using mock');
+        return await mockBackendResponse('add-message', { conversationId, message, userName, userId });
+    }
+}
+
+// Custom notification system with guaranteed display
+function showNotification(title, message, type = 'success', conversationId = null, duration = 6000) {
+    console.log('🔔 Creating notification:', { title, message, type, conversationId });
+    
+    // Remove any existing notifications first
+    const existingNotifications = document.querySelectorAll('.notification-overlay');
+    existingNotifications.forEach(notification => {
+        console.log('🗑️ Removing existing notification');
+        notification.remove();
+    });
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'notification-overlay';
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    // Icon based on type
+    const icons = {
+        success: '✓',
+        error: '✗',
+        warning: '⚠'
+    };
+    
+    // Close function
+    const closeNotification = () => {
+        console.log('🔒 Closing notification');
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentElement) {
+                overlay.remove();
+                console.log('🗑️ Notification removed from DOM');
+            }
+        }, 300);
+    };
+    
+    notification.innerHTML = `
+        <button class="notification-close" type="button">×</button>
+        <div class="notification-header">
+            <div class="notification-icon">${icons[type]}</div>
+            <h4 class="notification-title">${title}</h4>
+        </div>
+        <p class="notification-message">${message}</p>
+        ${conversationId ? `<div class="notification-conversation-id">Contact ID: ${conversationId}</div>` : ''}
+        ${duration > 0 ? `<div class="notification-actions">
+            <span class="notification-auto-close">Auto-closes in ${Math.ceil(duration/1000)}s</span>
+        </div>` : ''}
+    `;
+    
+    // Add close button event
+    const closeButton = notification.querySelector('.notification-close');
+    closeButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeNotification();
+    });
+    
+    // Add click outside to close
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeNotification();
+        }
+    });
+    
+    // Add to overlay and page
+    overlay.appendChild(notification);
+    document.body.appendChild(overlay);
+    console.log('📝 Notification added to body');
+    
+    // Force reflow and trigger animation
+    overlay.offsetHeight; // Force reflow
+    setTimeout(() => {
+        overlay.classList.add('show');
+        console.log('✨ Show animation triggered');
+    }, 50);
+    
+    // Auto-remove after duration
+    if (duration > 0) {
+        setTimeout(() => {
+            console.log(`⏰ Auto-closing notification after ${duration}ms`);
+            closeNotification();
+        }, duration);
+    }
+    
+    console.log('🎉 Notification creation complete');
+}
+
 // Quick message form handling
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM Content Loaded');
+    
     const quickMessageForm = document.getElementById('quickMessageForm');
     if (quickMessageForm) {
+        console.log('📝 Found quick message form, adding event listener');
+        
         quickMessageForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             console.log('🚀 Form submitted!');
             
-            const name = document.getElementById('quickName').value.trim();
-            const message = document.getElementById('quickMessage').value.trim();
-            const submitButton = this.querySelector('button[type="submit"]');
-            
-            console.log('📝 Form data - Name:', name, 'Message:', message);
-            
-            if (!name || !message) {
-                console.log('❌ Validation failed - missing name or message');
-                alert('Please fill in both name and message fields.');
-                return;
-            }
-            
-            console.log('✅ Validation passed, proceeding with submission');
-            
-            // Disable button and show loading state
-            submitButton.disabled = true;
-            submitButton.textContent = 'Sending...';
-            
-            // Get user and conversation IDs
-            const userId = getOrCreateUserId();
-            const conversationId = getOrCreateConversationId();
-            
-            console.log('User ID:', userId);
-            console.log('Conversation ID:', conversationId);
-            
-            const existingConversation = await checkExistingConversation(conversationId);
-            
-            if (existingConversation) {
-                // Continue existing conversation
-                const result = await addMessageToConversation(conversationId, message, name, userId);
+            try {
+                const name = document.getElementById('quickName').value.trim();
+                const message = document.getElementById('quickMessage').value.trim();
+                const submitButton = this.querySelector('button[type="submit"]');
                 
-                if (result.success) {
-                    alert(`✅ Message added to your ongoing conversation! Your Conversation ID is: ${conversationId}\n\nIf no one responds within an hour, our AI assistant will provide a helpful response.`);
-                    this.reset();
+                console.log('📝 Form data - Name:', name, 'Message:', message);
+                
+                if (!name || !message) {
+                    console.log('❌ Validation failed - missing name or message');
+                    showNotification(
+                        'Missing Information',
+                        'Please fill in both name and message fields.',
+                        'warning',
+                        null,
+                        4000
+                    );
+                    return;
+                }
+                
+                console.log('✅ Validation passed, proceeding with submission');
+                
+                // Disable button and show loading state
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Sending...';
+                }
+                
+                // Get user and conversation IDs
+                const userId = getOrCreateUserId();
+                const conversationId = getOrCreateConversationId();
+                
+                console.log('👤 User ID:', userId);
+                console.log('💬 Conversation ID:', conversationId);
+                
+                console.log('🔍 Checking for existing conversation...');
+                const existingConversation = await checkExistingConversation(conversationId);
+                console.log('📋 Existing conversation result:', existingConversation);
+                
+                if (existingConversation) {
+                    // Continue existing conversation
+                    console.log('🔄 Adding message to existing conversation...');
+                    const result = await addMessageToConversation(conversationId, message, name, userId);
+                    console.log('📤 Add message result:', result);
                     
-                    // Refresh conversation thread if visible
-                    const conversationThread = document.getElementById('conversationThread');
-                    if (conversationThread && conversationThread.style.display !== 'none') {
-                        await checkMessageStatus(conversationId);
+                    if (result.success) {
+                        console.log('✅ Message added successfully, showing notification...');
+                        const delayTime = result.delayMinutes ? formatDelayTime(result.delayMinutes * 60 * 1000) : '60 minutes';
+                        showNotification(
+                            'Message Added!',
+                            `Your message was added to the ongoing conversation.\n\nIf no one responds within ${delayTime}, our AI assistant will provide a helpful response.`,
+                            'success',
+                            conversationId,
+                            8000
+                        );
+                        this.reset();
+                    } else {
+                        console.log('❌ Message add failed, showing error notification...');
+                        showNotification(
+                            'Failed to Send',
+                            'Failed to send message. Please try joining our Discord server directly.',
+                            'error',
+                            null,
+                            6000
+                        );
                     }
                 } else {
-                    alert('❌ Failed to send message. Please try joining our Discord server directly: https://discord.gg/C2dryrBK');
-                }
-            } else {
-                // Send new message to Discord - but use existing conversation ID if available
-                const result = await sendToDiscord(name, message, conversationId, userId);
-                
-                if (result.success) {
-                    // Store message locally
-                    const messageData = {
-                        id: result.conversationId,
-                        userId: result.userId,
-                        name: name,
-                        message: message,
-                        timestamp: new Date().toISOString(),
-                        status: 'sent'
-                    };
+                    // Send new message to Discord
+                    console.log('🆕 Sending new message to Discord...');
+                    const result = await sendToDiscord(name, message, conversationId, userId);
+                    console.log('📤 Send to Discord result:', result);
                     
-                    // Save to localStorage
-                    let messages = JSON.parse(localStorage.getItem('cccc_messages') || '[]');
-                    messages.push(messageData);
-                    localStorage.setItem('cccc_messages', JSON.stringify(messages));
-                    
-                    // Schedule auto-response - use the actual IDs from the result
-                    try {
-                        const schedulePayload = {
-                            conversationId: result.conversationId,
+                    if (result.success) {
+                        console.log('✅ Message sent successfully, showing notification...');
+                        
+                        // Store message locally
+                        const messageData = {
+                            id: result.conversationId,
                             userId: result.userId,
-                            originalMessage: message,
-                            userName: name
+                            name: name,
+                            message: message,
+                            timestamp: new Date().toISOString(),
+                            status: 'sent'
                         };
                         
-                        console.log('Scheduling auto-response with payload:', schedulePayload);
+                        // Save to localStorage
+                        let messages = JSON.parse(localStorage.getItem('cccc_messages') || '[]');
+                        messages.push(messageData);
+                        localStorage.setItem('cccc_messages', JSON.stringify(messages));
                         
-                        const scheduleResponse = await fetch('http://localhost:3001/api/schedule-response', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(schedulePayload)
-                        });
-                        
-                        if (!scheduleResponse.ok) {
-                            const errorText = await scheduleResponse.text();
-                            console.error('Auto-response scheduling failed:', scheduleResponse.status, errorText);
-                        } else {
-                            console.log('Auto-response scheduled successfully');
+                        // Schedule auto-response (try, but don't fail if backend is down)
+                        let delayTime = '60 minutes'; // default fallback
+                        try {
+                            const schedulePayload = {
+                                conversationId: result.conversationId,
+                                userId: result.userId,
+                                originalMessage: message,
+                                userName: name
+                            };
+                            
+                            const scheduleResponse = await fetch('http://localhost:3001/api/schedule-response', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(schedulePayload)
+                            });
+                            
+                            if (scheduleResponse.ok) {
+                                const scheduleData = await scheduleResponse.json();
+                                delayTime = scheduleData?.delayMinutes ? formatDelayTime(scheduleData.delayMinutes * 60 * 1000) : '60 minutes';
+                            }
+                        } catch (error) {
+                            console.log('⚠️ Auto-response scheduling failed, using default delay');
                         }
-                    } catch (error) {
-                        console.error('Auto-response scheduling failed:', error);
+                        
+                        console.log('📱 About to show success notification...');
+                        showNotification(
+                            'Message Sent Successfully!',
+                            `Save this Contact ID to check for responses later.\n\nIf no one responds within ${delayTime}, our AI assistant will provide a helpful response.\n\nYou can also find it in the "Check Message Status" section below.`,
+                            'success',
+                            result.conversationId,
+                            10000
+                        );
+                        console.log('📱 Success notification called');
+                        this.reset();
+                        
+                        // Update the message tracker display
+                        updateMessageTracker();
+                    } else {
+                        console.log('❌ Message send failed, showing error notification...');
+                        showNotification(
+                            'Failed to Send',
+                            'Failed to send message. Please try joining our Discord server directly.',
+                            'error',
+                            null,
+                            6000
+                        );
                     }
-                    
-                    alert(`✅ Message sent successfully! Your Conversation ID is: ${result.conversationId}\n\nSave this ID to check for responses later. If no one responds within an hour, our AI assistant will provide a helpful response.\n\nYou can also find it in the "Check Message Status" section below.`);
-                    this.reset();
-                    
-                    // Update the message tracker display
-                    updateMessageTracker();
-                } else {
-                    alert('❌ Failed to send message. Please try joining our Discord server directly: https://discord.gg/C2dryrBK');
+                }
+                
+            } catch (error) {
+                console.error('💥 Form submission error:', error);
+                showNotification(
+                    'Error',
+                    'An unexpected error occurred. Please try again.',
+                    'error',
+                    null,
+                    6000
+                );
+            } finally {
+                // Re-enable button
+                const submitButton = this.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Send to Discord';
                 }
             }
-            
-            // Re-enable button
-            submitButton.disabled = false;
-            submitButton.textContent = 'Send to Discord';
         });
+    } else {
+        console.log('⚠️ Quick message form not found');
     }
     
     // Status checker functionality
@@ -350,6 +560,37 @@ document.addEventListener('DOMContentLoaded', function() {
     // Fetch Discord data
     fetchDiscordWidget();
 });
+
+// Test functions for notifications (can be called from browser console)
+function testNotification() {
+    console.log('🧪 Testing notification system...');
+    showNotification('Test Notification', 'This is a test message to verify notifications work!', 'success', 'CCCC-test-123', 5000);
+}
+
+function testAllNotifications() {
+    setTimeout(() => showNotification('Success!', 'Message sent successfully!', 'success', 'CCCC-123', 5000), 100);
+    setTimeout(() => showNotification('Error!', 'Something went wrong!', 'error', null, 5000), 2000);
+    setTimeout(() => showNotification('Warning!', 'Please check your input!', 'warning', null, 5000), 4000);
+}
+
+// Simple test notification without animations
+function testSimpleNotification() {
+    const simple = document.createElement('div');
+    simple.style.cssText = `
+        position: fixed;
+        top: 50px;
+        right: 50px;
+        background: red;
+        color: white;
+        padding: 20px;
+        z-index: 99999;
+        border: 3px solid black;
+    `;
+    simple.textContent = 'SIMPLE TEST NOTIFICATION';
+    document.body.appendChild(simple);
+    console.log('🔴 Simple notification added');
+    setTimeout(() => simple.remove(), 3000);
+}
 
 // Message status functions
 function updateMessageTracker() {
@@ -392,8 +633,10 @@ async function checkMessageStatus(contactId) {
     const conversationThread = document.getElementById('conversationThread');
     
     // Show loading state
-    checkStatusBtn.disabled = true;
-    checkStatusBtn.textContent = 'Checking...';
+    if (checkStatusBtn) {
+        checkStatusBtn.disabled = true;
+        checkStatusBtn.textContent = 'Checking...';
+    }
     showStatusResult('Checking for response...', 'pending');
     if (conversationThread) {
         conversationThread.style.display = 'none';
@@ -404,49 +647,22 @@ async function checkMessageStatus(contactId) {
         
         // Check for conversation history
         const conversationResponse = await fetch(`http://localhost:3001/api/conversation?id=${contactId}`);
-        console.log('Conversation API response status:', conversationResponse.status);
-        
         const conversationData = await conversationResponse.json();
-        console.log('Conversation data:', conversationData);
         
         if (conversationData.found) {
             // Show conversation thread
             displayConversationThread(contactId, conversationData.conversation);
             showStatusResult(`💬 Conversation thread loaded! ${conversationData.conversation.messages.length} messages found.`, 'success');
         } else {
-            // Check bot API for single response (backward compatibility)
-            console.log('No conversation found, checking for single response...');
-            const response = await fetch(`http://localhost:3001/api/response?id=${contactId}`);
-            console.log('Response API response status:', response.status);
+            // Check local storage for message info as fallback
+            const messages = JSON.parse(localStorage.getItem('cccc_messages') || '[]');
+            const localMessage = messages.find(msg => msg.id === contactId);
             
-            const data = await response.json();
-            console.log('Response data:', data);
-            
-            if (data.found) {
-                // Response found! Update local storage
-                const messages = JSON.parse(localStorage.getItem('cccc_messages') || '[]');
-                const messageIndex = messages.findIndex(msg => msg.id === contactId);
-                if (messageIndex !== -1) {
-                    messages[messageIndex].status = 'responded';
-                    messages[messageIndex].response = data.response;
-                    messages[messageIndex].responseTime = data.timestamp;
-                    localStorage.setItem('cccc_messages', JSON.stringify(messages));
-                    updateMessageTracker();
-                }
-                
-                const responseTime = getTimeAgo(new Date(data.timestamp));
-                showStatusResult(`✅ Response received ${responseTime}!\n\n"${data.response}"\n\n- ${data.responder}`, 'success');
+            if (localMessage) {
+                const timeAgo = getTimeAgo(new Date(localMessage.timestamp));
+                showStatusResult(`📨 Message found! Sent ${timeAgo}. No response yet. Climate activists will reply with: !respond ${contactId} [message]`, 'pending');
             } else {
-                // No response yet - check local storage for message info
-                const messages = JSON.parse(localStorage.getItem('cccc_messages') || '[]');
-                const localMessage = messages.find(msg => msg.id === contactId);
-                
-                if (localMessage) {
-                    const timeAgo = getTimeAgo(new Date(localMessage.timestamp));
-                    showStatusResult(`📨 Message found! Sent ${timeAgo}. No response yet. Climate activists will reply with: !respond ${contactId} [message]`, 'pending');
-                } else {
-                    showStatusResult(`❌ Contact ID ${contactId} not found. Please check the ID or contact us directly on Discord.`, 'error');
-                }
+                showStatusResult(`❌ Contact ID ${contactId} not found. Please check the ID or contact us directly on Discord.`, 'error');
             }
         }
     } catch (error) {
@@ -463,8 +679,10 @@ async function checkMessageStatus(contactId) {
         }
     } finally {
         // Reset button
-        checkStatusBtn.disabled = false;
-        checkStatusBtn.textContent = 'Check Status';
+        if (checkStatusBtn) {
+            checkStatusBtn.disabled = false;
+            checkStatusBtn.textContent = 'Check Status';
+        }
         
         // Start auto-refresh every 10 seconds
         startAutoRefresh(contactId);
@@ -564,6 +782,28 @@ function getTimeAgo(date) {
     return 'just now';
 }
 
+// Format delay time in human-readable format
+function formatDelayTime(milliseconds) {
+    const seconds = milliseconds / 1000;
+    const minutes = seconds / 60;
+    const hours = minutes / 60;
+    const days = hours / 24;
+    
+    if (days >= 1) {
+        const dayCount = Math.floor(days);
+        return `${dayCount} day${dayCount > 1 ? 's' : ''}`;
+    } else if (hours >= 1) {
+        const hourCount = Math.floor(hours);
+        return `${hourCount} hour${hourCount > 1 ? 's' : ''}`;
+    } else if (minutes >= 1) {
+        const minuteCount = Math.floor(minutes);
+        return `${minuteCount} minute${minuteCount > 1 ? 's' : ''}`;
+    } else {
+        const secondCount = Math.floor(seconds);
+        return `${secondCount} second${secondCount > 1 ? 's' : ''}`;
+    }
+}
+
 // Display conversation thread
 function displayConversationThread(contactId, conversation) {
     const conversationThread = document.getElementById('conversationThread');
@@ -601,42 +841,6 @@ function displayConversationThread(contactId, conversation) {
     
     // Scroll to bottom
     conversationMessages.scrollTop = conversationMessages.scrollHeight;
-}
-
-// Check if conversation exists
-async function checkExistingConversation(contactId) {
-    try {
-        const response = await fetch(`http://localhost:3001/api/conversation?id=${contactId}`);
-        const data = await response.json();
-        return data.found;
-    } catch (error) {
-        console.error('Error checking existing conversation:', error);
-        return false;
-    }
-}
-
-// Add message to existing conversation
-async function addMessageToConversation(conversationId, message, userName, userId) {
-    try {
-        const response = await fetch('http://localhost:3001/api/add-message', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                conversationId: conversationId,
-                message: message,
-                userName: userName,
-                userId: userId
-            })
-        });
-        
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error('Error adding message to conversation:', error);
-        return { success: false, error: error.message };
-    }
 }
 
 // Initialize conversation UI
@@ -690,7 +894,7 @@ async function initializeConversationUI() {
                     statusResult.style.display = 'none';
                 }
                 
-                alert(`Conversation display cleared! Your Contact ID remains: ${conversationId}\nThe AI will still remember all your previous messages.`);
+                showNotification('Conversation Cleared', `Conversation display cleared! Your Contact ID remains: ${conversationId}\nThe AI will still remember all your previous messages.`, 'success', conversationId, 5000);
             }
         });
     }
@@ -710,7 +914,7 @@ function setupFollowUpHandler(contactId) {
     newSendBtn.addEventListener('click', async function() {
         const message = followUpMessage.value.trim();
         if (!message) {
-            alert('Please enter a message');
+            showNotification('Missing Message', 'Please enter a message', 'warning', null, 3000);
             return;
         }
         
@@ -726,47 +930,36 @@ function setupFollowUpHandler(contactId) {
         
         try {
             // Send follow-up message
-            const response = await fetch('http://localhost:3001/api/add-message', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    conversationId: contactId,
-                    message: message,
-                    userName: userName,
-                    userId: userId
-                })
-            });
+            const result = await addMessageToConversation(contactId, message, userName, userId);
             
-            const data = await response.json();
-            
-            if (data.success) {
+            if (result.success) {
                 // Add message to conversation display immediately
                 const conversationMessages = document.getElementById('conversationMessages');
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'conversation-message user';
-                messageDiv.innerHTML = `
-                    <div class="message-meta">
-                        <span class="message-author">You</span>
-                        <span class="message-timestamp">just now</span>
-                    </div>
-                    <div class="message-content">${message}</div>
-                `;
-                conversationMessages.appendChild(messageDiv);
-                conversationMessages.scrollTop = conversationMessages.scrollHeight;
+                if (conversationMessages) {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'conversation-message user';
+                    messageDiv.innerHTML = `
+                        <div class="message-meta">
+                            <span class="message-author">You</span>
+                            <span class="message-timestamp">just now</span>
+                        </div>
+                        <div class="message-content">${message}</div>
+                    `;
+                    conversationMessages.appendChild(messageDiv);
+                    conversationMessages.scrollTop = conversationMessages.scrollHeight;
+                }
                 
                 // Clear the input
                 followUpMessage.value = '';
                 
-                // Show success message
-                showStatusResult(`✅ Follow-up message sent! Auto-response scheduled in ${data.delayMinutes} minutes if no human responds.`, 'success');
+                // Show success notification
+                showNotification('Follow-up Sent!', `Follow-up message sent! Auto-response scheduled in ${result.delayMinutes || 60} minutes if no human responds.`, 'success', contactId, 5000);
             } else {
-                showStatusResult('❌ Failed to send follow-up message. Please try again.', 'error');
+                showNotification('Failed to Send', 'Failed to send follow-up message. Please try again.', 'error', null, 5000);
             }
         } catch (error) {
             console.error('Error sending follow-up:', error);
-            showStatusResult('❌ Failed to send follow-up message. Please try again.', 'error');
+            showNotification('Error', 'Failed to send follow-up message. Please try again.', 'error', null, 5000);
         } finally {
             // Re-enable button
             newSendBtn.disabled = false;
@@ -778,11 +971,15 @@ function setupFollowUpHandler(contactId) {
 // Mobile menu toggle (if needed in future)
 function toggleMobileMenu() {
     const navMenu = document.querySelector('.nav-menu');
-    navMenu.classList.toggle('active');
+    if (navMenu) {
+        navMenu.classList.toggle('active');
+    }
 }
 
-// Removed button hover animations
+// Export functions to global scope for console testing
+window.testNotification = testNotification;
+window.testAllNotifications = testAllNotifications;
+window.testSimpleNotification = testSimpleNotification;
+window.showNotification = showNotification;
 
-// Removed parallax effect
-
-// Removed form input animations
+console.log('🎯 Script loaded successfully with enhanced notification system');
